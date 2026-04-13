@@ -1,0 +1,23 @@
+# API 키 / 환경변수 (절대 커밋 금지)
+.env
+.streamlit/secrets.toml
+
+# 분석 결과물 (로컬 전용)
+_research/
+_drafts/
+_briefs/
+_reviews/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
