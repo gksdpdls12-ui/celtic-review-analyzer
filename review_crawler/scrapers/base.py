@@ -61,26 +61,44 @@ def safe_get(
     url: str,
     params: dict | None = None,
     timeout: int = 15,
-    retries: int = 2,
+    retries: int = 3,
 ) -> Response | None:
     """재시도 포함 안전한 GET 요청"""
+    resp = None
     for attempt in range(retries + 1):
         try:
             resp = session.get(url, params=params, timeout=timeout)
-            resp.raise_for_status()
-            return resp
-        except requests.exceptions.HTTPError as e:
-            if resp.status_code in (403, 429):
-                wait = (attempt + 1) * 3
-                print(f"[scraper] {resp.status_code} 응답 — {wait}초 대기 후 재시도")
+
+            # 200 OK
+            if resp.status_code == 200:
+                return resp
+
+            # Rate limit / bot detection → 대기 후 재시도
+            if resp.status_code in (429, 403):
+                wait = (attempt + 1) * 4
+                print(f"[scraper] {resp.status_code} — {wait}초 대기 후 재시도 ({attempt+1}/{retries})")
+                # User-Agent 교체 (bot 감지 우회 시도)
+                session.headers.update({"User-Agent": random.choice(USER_AGENTS)})
                 time.sleep(wait)
-            else:
-                print(f"[scraper] HTTP 오류 {resp.status_code}: {url}")
-                return None
-        except requests.exceptions.RequestException as e:
-            print(f"[scraper] 요청 실패 (시도 {attempt + 1}): {e}")
+                continue
+
+            # 그 외 4xx/5xx → 즉시 None
+            print(f"[scraper] HTTP {resp.status_code}: {url}")
+            return None
+
+        except requests.exceptions.Timeout:
+            print(f"[scraper] 타임아웃 (시도 {attempt+1}): {url}")
             if attempt < retries:
                 time.sleep(2)
+        except requests.exceptions.ConnectionError as e:
+            print(f"[scraper] 연결 오류 (시도 {attempt+1}): {e}")
+            if attempt < retries:
+                time.sleep(3)
+        except requests.exceptions.RequestException as e:
+            print(f"[scraper] 요청 실패 (시도 {attempt+1}): {e}")
+            if attempt < retries:
+                time.sleep(2)
+
     return None
 
 
