@@ -93,6 +93,13 @@ def run_crawl_and_analyze(
 
     if dry_run:
         print("\n[dry-run] 크롤링만 수행. 분석 건너뜀.")
+        print(f"  제품명 : {product_info.product_name or '(미확인)'}")
+        print(f"  브랜드 : {product_info.brand or '(미확인)'}")
+        print(f"  별점   : {product_info.rating or '(미확인)'}")
+        print(f"  리뷰수 : {len(reviews)}개 수집")
+        if reviews:
+            print(f"\n  첫 번째 리뷰 미리보기:")
+            print(f"  [{reviews[0].date}] ★{reviews[0].rating}  {reviews[0].content[:80]}...")
         return 0
 
     if not reviews:
