@@ -1,277 +1,116 @@
 """
-W2O 분석 결과를 _research/ 폴더에 마크다운 보고서로 저장
-파일명 형식: YYYY-MM-DD_[경쟁사]_W2O분석.md
+마크다운 / JSON 보고서 저장
 """
 
 from __future__ import annotations
-
-import json
-import os
-from datetime import date
 from pathlib import Path
-
-from .insight_builder import CompetitorInsightDeck, FullInsightReport
-from .models import W2OAnalysis, W2OReport
+from .models import FullAnalysis
 
 
-# ─────────────────────────────────────────────
-# 단일 경쟁사 마크다운 보고서
-# ─────────────────────────────────────────────
+def save_markdown(analysis: FullAnalysis, output_dir: str | Path) -> Path:
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-def _severity_emoji(severity: str) -> str:
-    return {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(severity.lower(), "⚪")
+    p = analysis.product_info
+    s = analysis.sentiment
+    u = analysis.usage_context
+    v = analysis.voc
+    m = analysis.marketing_insight
 
+    platform_label = {"naver_smartstore": "네이버 스마트스토어", "coupang": "쿠팡"}.get(p.platform, p.platform or "CSV")
 
-def _bar(ratio: float, width: int = 20) -> str:
-    filled = round(ratio * width)
-    return "█" * filled + "░" * (width - filled)
-
-
-def render_analysis_markdown(analysis: W2OAnalysis) -> str:
-    lines: list[str] = []
-
-    lines += [
-        f"# {analysis.competitor} W2O 리뷰 분석 보고서",
-        f"> 분석일: {analysis.analysis_date}  |  분석 리뷰 수: {analysis.analyzed_review_count}개  |  카테고리: {analysis.product_category}",
-        "",
-        "---",
-        "",
-        "## 1. 핵심 전략 요약",
-        "",
-        analysis.executive_summary,
-        "",
-        f"**즉시 실행 액션**: {analysis.priority_action}",
-        "",
-        "---",
-        "",
-        "## 2. 감성 분석",
-        "",
-        f"| 감성 | 비율 | 시각화 |",
-        f"|------|------|--------|",
-        f"| 긍정 | {analysis.sentiment.positive_ratio:.0%} | {_bar(analysis.sentiment.positive_ratio)} |",
-        f"| 부정 | {analysis.sentiment.negative_ratio:.0%} | {_bar(analysis.sentiment.negative_ratio)} |",
-        f"| 중립 | {analysis.sentiment.neutral_ratio:.0%} | {_bar(analysis.sentiment.neutral_ratio)} |",
-        "",
-        f"**긍정 키워드**: {', '.join(analysis.sentiment.top_positive_keywords)}",
-        f"**부정 키워드**: {', '.join(analysis.sentiment.top_negative_keywords)}",
-        "",
-        "---",
-        "",
-        "## 3. 페인포인트 Top 5",
-        "",
+    lines = [
+        f"# 리뷰 분석 보고서 — {p.product_name or '제품'}",
+        f"",
+        f"- **플랫폼**: {platform_label}",
+        f"- **평균 별점**: {p.rating:.1f}점" if p.rating else "- **평균 별점**: -",
+        f"- **전체 리뷰**: {p.total_reviews:,}개 (분석: {p.analyzed_count}개)",
+        f"- **분석일**: {analysis.analyzed_at}",
+        f"",
+        f"---",
+        f"",
+        f"## 1. 감성 분석",
+        f"",
+        f"**종합 감성**: {s.overall_sentiment}",
+        f"**요약**: {s.sentiment_summary}",
+        f"",
+        f"| 감성 | 비율 |",
+        f"|------|------|",
+        f"| 긍정 | {s.positive_ratio:.0%} |",
+        f"| 부정 | {s.negative_ratio:.0%} |",
+        f"| 중립 | {s.neutral_ratio:.0%} |",
+        f"",
+        f"**긍정 키워드**: {', '.join(s.positive)}",
+        f"**부정 키워드**: {', '.join(s.negative)}",
+        f"",
+        f"---",
+        f"",
+        f"## 2. 사용 맥락 분석",
+        f"",
+        f"- **주 사용자 유형**: {u.primary_user_type}",
+        f"- **타겟 마케팅 방향**: {u.target_marketing_direction}",
+        f"- **최적 광고 타이밍**: {u.best_timing}",
+        f"",
+        f"---",
+        f"",
+        f"## 3. VOC — 핵심 불만",
+        f"",
+        f"> **핵심 불만**: {v.recurring_complaint}",
+        f"",
     ]
 
-    for i, pain in enumerate(analysis.pain_points, 1):
-        severity_icon = _severity_emoji(pain.severity)
+    for i, issue in enumerate(v.top_issues, 1):
         lines += [
-            f"### {i}. {pain.category} {severity_icon}",
-            f"- **설명**: {pain.description}",
-            f"- **언급 빈도**: {pain.frequency}건",
-            f"- **심각도**: {pain.severity}",
+            f"### #{i} {issue.keyword} [{issue.category}] — 심각도 {issue.severity}",
+            f"{issue.description}",
+            f"- 빈도: {issue.frequency}건",
         ]
-        if pain.representative_quotes:
-            lines.append("- **대표 인용**:")
-            for q in pain.representative_quotes:
-                lines.append(f'  > "{q}"')
+        for q in issue.quotes:
+            lines.append(f'- > "{q}"')
+        if issue.improvement_suggestion:
+            lines.append(f"- 개선 제안: {issue.improvement_suggestion}")
         lines.append("")
 
     lines += [
         "---",
         "",
-        "## 4. 숨겨진 니즈",
+        "## 4. 마케팅 카피",
         "",
-        "| 페인포인트 | 숨겨진 니즈 | 인사이트 |",
-        "|-----------|------------|---------|",
+        "### 긍정 기반 후킹 카피",
+        "",
     ]
-    for need in analysis.hidden_needs:
-        lines.append(
-            f"| {need.pain_point_category} | {need.hidden_need} | {need.insight} |"
-        )
+    for i, c in enumerate(m.hook_copy_from_positive, 1):
+        lines += [f"**{i}. {c.headline}**", f"{c.sub_copy}", f"- 채널: {c.channel} | 타입: {c.copy_type}", ""]
 
-    lines += [
-        "",
-        "---",
-        "",
-        "## 5. 대성쎌틱 강점 매칭",
-        "",
-    ]
-    for i, match in enumerate(analysis.strength_matches, 1):
-        score_bar = "★" * match.match_score + "☆" * (10 - match.match_score)
-        lines += [
-            f"### 매칭 {i}  {score_bar} ({match.match_score}/10)",
-            f"- **충족 니즈**: {match.hidden_need}",
-            f"- **우리 강점**: {match.our_strength}",
-            f"- **근거**: {match.evidence}",
-            "",
-        ]
+    lines += ["### 부정 반전 신뢰 카피", ""]
+    for i, c in enumerate(m.trust_copy_from_negative, 1):
+        lines += [f"**{i}. {c.headline}**", f"{c.sub_copy}", f"- 채널: {c.channel} | 타입: {c.copy_type}", ""]
 
     lines += [
         "---",
         "",
-        "## 6. 공략 마케팅 카피",
+        "## 5. 기회 포인트",
         "",
-    ]
-    for i, copy in enumerate(analysis.attack_copies, 1):
-        lines += [
-            f"### 카피 #{i} — {copy.hook_angle}",
-            f"**공략 약점**: {copy.target_pain}",
-            f"**내세울 강점**: {copy.our_strength}",
-            f"",
-            f"| 구분 | 내용 |",
-            f"|------|------|",
-            f"| 헤드라인 | **{copy.headline}** |",
-            f"| 본문 | {copy.body_copy} |",
-            f"| 추천 채널 | {copy.channel} |",
-            f"| 소구 각도 | {copy.hook_angle} |",
-            "",
-        ]
-
-    lines += [
-        "---",
-        "",
-        "## 7. 구매자 페르소나",
-        "",
-    ]
-    for persona in analysis.personas:
-        lines += [
-            f"### {persona.segment_name} (비중: {persona.proportion})",
-            f"- **특징**: {persona.characteristics}",
-            f"- **주요 관심사**: {persona.primary_concern}",
-            "",
-        ]
-
-    lines += [
-        "---",
-        "",
-        "## 8. 마케팅 인사이트",
-        "",
-        "### 긍정 리뷰 기반 훅 카피",
-        f"> {analysis.marketing_insight.positive_hook}",
-        "",
-        "### 부정 리뷰 역이용 신뢰 전략",
-        f"> {analysis.marketing_insight.trust_strategy}",
-        "",
-        "### 추천 콘텐츠 방향",
-        f"{analysis.marketing_insight.content_direction}",
-        "",
+        f"- **기회 포인트**: {m.opportunity_gap}",
+        f"- **추천 콘텐츠**: {m.recommended_content_theme}",
+        f"- **대성쎌틱 어필**: {m.competitive_advantage_hint}",
     ]
 
-    if analysis.marketing_insight.urgency_trigger:
-        lines += [
-            "### 구매 트리거",
-            f"{analysis.marketing_insight.urgency_trigger}",
-            "",
-        ]
-
-    lines += [
-        "---",
-        "",
-        f"*Generated by 대성쎌틱에너시스 W2O Review Analyzer | {analysis.analysis_date}*",
-    ]
-
-    return "\n".join(lines)
+    safe = (p.product_name or "report").replace(" ", "_")[:40]
+    date_str = analysis.analyzed_at or "report"
+    path = output_dir / f"{date_str}_{safe}_리뷰분석.md"
+    path.write_text("\n".join(lines), encoding="utf-8")
+    print(f"[reporter] 마크다운 저장: {path}")
+    return path
 
 
-# ─────────────────────────────────────────────
-# 전체 보고서 (복수 경쟁사)
-# ─────────────────────────────────────────────
-
-def render_full_report_markdown(report: W2OReport) -> str:
-    lines: list[str] = [
-        f"# {report.report_title}",
-        f"> 생성일: {report.generated_at}  |  분석 브랜드: {report.our_brand}",
-        "",
-        "---",
-        "",
-        "## 목차",
-    ]
-
-    for i, analysis in enumerate(report.analyses, 1):
-        lines.append(f"{i}. [{analysis.competitor} 분석](#{analysis.competitor.replace(' ', '-')})")
-
-    if report.cross_competitor_insight:
-        lines.append(f"{len(report.analyses) + 1}. [경쟁사 공통 기회 분석](#cross-analysis)")
-
-    lines += ["", "---", ""]
-
-    for analysis in report.analyses:
-        lines.append(render_analysis_markdown(analysis))
-        lines += ["", "---", ""]
-
-    if report.cross_competitor_insight:
-        lines += [
-            "## 경쟁사 공통 기회 분석 {#cross-analysis}",
-            "",
-            report.cross_competitor_insight,
-            "",
-        ]
-
-    return "\n".join(lines)
-
-
-# ─────────────────────────────────────────────
-# 파일 저장
-# ─────────────────────────────────────────────
-
-def save_analysis(
-    analysis: W2OAnalysis,
-    output_dir: str | Path,
-) -> Path:
-    """단일 경쟁사 분석을 마크다운 파일로 저장"""
+def save_json(analysis: FullAnalysis, output_dir: str | Path) -> Path:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    safe_name = analysis.competitor.replace(" ", "_").replace("/", "_")
-    filename = f"{analysis.analysis_date}_{safe_name}_W2O분석.md"
-    filepath = output_dir / filename
-
-    content = render_analysis_markdown(analysis)
-    filepath.write_text(content, encoding="utf-8")
-    print(f"[reporter] 보고서 저장: {filepath}")
-    return filepath
-
-
-def save_full_report(
-    report: W2OReport,
-    output_dir: str | Path,
-) -> tuple[Path, Path]:
-    """전체 W2OReport를 마크다운 + JSON으로 저장"""
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    today = date.today().isoformat()
-    md_path = output_dir / f"{today}_경쟁사_W2O_통합분석.md"
-    json_path = output_dir / f"{today}_경쟁사_W2O_분석데이터.json"
-
-    # 마크다운
-    md_path.write_text(render_full_report_markdown(report), encoding="utf-8")
-    print(f"[reporter] 통합 보고서 저장: {md_path}")
-
-    # JSON (후속 처리·PPT 슬라이드 데이터용)
-    json_path.write_text(
-        report.model_dump_json(indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
-    print(f"[reporter] JSON 데이터 저장: {json_path}")
-
-    return md_path, json_path
-
-
-def save_pencil_hints(
-    hints: list[dict],
-    output_dir: str | Path,
-    competitor: str,
-) -> Path:
-    """Pencil MCP 레이아웃 힌트를 JSON으로 저장"""
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    today = date.today().isoformat()
-    safe_name = competitor.replace(" ", "_")
-    filepath = output_dir / f"{today}_{safe_name}_pencil_hints.json"
-
-    with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(hints, f, ensure_ascii=False, indent=2)
-
-    print(f"[reporter] Pencil 힌트 저장: {filepath}")
-    return filepath
+    safe = (analysis.product_info.product_name or "report").replace(" ", "_")[:40]
+    date_str = analysis.analyzed_at or "report"
+    path = output_dir / f"{date_str}_{safe}_분석데이터.json"
+    path.write_text(analysis.model_dump_json(indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"[reporter] JSON 저장: {path}")
+    return path

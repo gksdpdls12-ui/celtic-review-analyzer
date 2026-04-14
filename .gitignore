@@ -8,6 +8,16 @@ _drafts/
 _briefs/
 _reviews/
 
+# 이미지/디자인 에셋 (용량 초과 방지)
+_templates/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.mp4
+*.pptx
+*.pen
+
 # Python
 __pycache__/
 *.py[cod]

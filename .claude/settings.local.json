@@ -1,7 +1,21 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:blog.naver.com)"
+      "WebFetch(domain:blog.naver.com)",
+      "WebFetch(domain:www.behance.net)",
+      "Bash(gh api:*)",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(f['path']\\) for f in data.get\\('tree',[]\\) if f['type']=='blob']\")",
+      "Bash(python -c \"from playwright.sync_api import sync_playwright; print\\('playwright 설치됨'\\)\")",
+      "Bash(pip install:*)",
+      "Bash(playwright install:*)",
+      "Bash(python -c ':*)",
+      "Bash(python -m review_crawler --check \"https://smartstore.naver.com/celticmaster/products/5812345678\")",
+      "Bash(python -m review_crawler \"https://smartstore.naver.com/inframaxshinil/products/10285509978?nl-ts-pid=jO2gzlqosZossfg%2BB2s-473752&NaPm=ct%3Dmnxxc7mn%7Cci%3DCrMw1AAAAZ2JiV7jCMixzQ%2E%2E01%7Ctr%3Dpmax%7Chk%3D8ef7d4b6186ba517914fe9ddac8be22acbe48c4e%7Cnacn%3DrvL0B0AsK4jfB\" --dry-run)",
+      "Bash(python:*)",
+      "Bash(taskkill /F /IM chrome.exe)",
+      "Bash(cmd /c \"taskkill /F /IM chrome.exe\")",
+      "Bash(cmd:*)",
+      "Bash(ls *.py *.txt)"
     ]
   }
 }
